@@ -39,7 +39,7 @@
 <script>
     // Твоя база данных на kvdb.io
     const dbUrl = 'https://kvdb.io/VmvrH4Hv3QwN1LmpVAcupa/votes_realtime_sync';
-    const storageKey = 'user_has_voted_key_sync';
+    const storageKey = 'user_has_voted_key_sync_v5'; // Обновили ключ, чтобы сбросить старые тесты
     
     const labels = ['JavaScript', 'Python', 'C++'];
     const colors = ['#f7df1e', '#3776ab', '#00599c'];
@@ -54,10 +54,10 @@
         options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
     });
 
-    // Функция загрузки данных из сети
+    // Функция загрузки данных из сети (с защитой от кэша '?t=')
     async function loadData() {
         try {
-            const res = await fetch(dbUrl);
+            const res = await fetch(dbUrl + '?t=' + Date.now()); // Добавляем время, чтобы обойти кэш!
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data) && data.length === 3) {
@@ -76,7 +76,8 @@
     async function saveToDb(array) {
         try {
             await fetch(dbUrl, {
-                method: 'POST',
+                method: 'PUT', // PUT надежнее перезаписывает данные на kvdb
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(array)
             });
         } catch (e) { console.error("Ошибка сети:", e); }
@@ -94,9 +95,9 @@
 
         const idx = parseInt(selected.value);
 
-        // Скачиваем актуальные результаты перед добавлением своего голоса
+        // Скачиваем актуальные результаты перед добавлением своего голоса (без кэша!)
         try {
-            const res = await fetch(dbUrl);
+            const res = await fetch(dbUrl + '?t=' + Date.now());
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data)) votes = data;
