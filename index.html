@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Опрос в реальном времени</title>
+    <!-- Подключаем графики -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #eef2f3; margin: 0; }
+        .card { width: 320px; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
+        h3 { margin-top: 0; color: #333; }
+        label { display: block; margin: 12px 0; text-align: left; font-size: 16px; color: #555; cursor: pointer; }
+        input[type="radio"] { margin-right: 10px; transform: scale(1.1); }
+        .btn { width: 100%; padding: 12px; margin-top: 15px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }
+        #voteBtn { background-color: #4CAF50; color: white; }
+        #voteBtn:disabled { background-color: #ccc; cursor: not-allowed; }
+        .leader-box { margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: bold; font-size: 16px; }
+        .dot { width: 14px; height: 14px; border-radius: 50%; background-color: #ccc; border: 1px solid #999; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h3>Лучший язык программирования?</h3>
+    <label><input type="radio" name="lang" value="0" checked> JavaScript</label>
+    <label><input type="radio" name="lang" value="1"> Python</label>
+    <label><input type="radio" name="lang" value="2"> C++</label>
+    
+    <button id="voteBtn" class="btn" onclick="castVote()">Голосовать</button>
+
+    <div class="leader-box">
+        <span>Лидер:</span>
+        <span id="leaderName">Загрузка...</span>
+        <div id="leaderDot" class="dot"></div>
+    </div>
+    <canvas id="pollChart" height="200"></canvas>
+</div>
+
+<script>
+    // Твоя база данных на kvdb.io
+    const dbUrl = 'https://kvdb.io/VmvrH4Hv3QwN1LmpVAcupa/votes_realtime_sync';
+    const storageKey = 'user_has_voted_key_sync';
+    
+    const labels = ['JavaScript', 'Python', 'C++'];
+    const colors = ['#f7df1e', '#3776ab', '#00599c'];
+    let votes = [0, 0, 0];
+    let chart;
+
+    // Инициализируем график
+    const ctx = document.getElementById('pollChart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: labels, datasets: [{ data: votes, backgroundColor: colors }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+    });
+
+    // Функция загрузки данных из сети
+    async function loadData() {
+        try {
+            const res = await fetch(dbUrl);
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data) && data.length === 3) {
+                    votes = data;
+                    chart.data.datasets[0].data = votes;
+                    chart.update();
+                    updateLeaderboard();
+                }
+            } else if (res.status === 404) {
+                await saveToDb([0, 0, 0]);
+            }
+        } catch (e) { console.log("Связь..."); }
+    }
+
+    // Функция сохранения данных в сеть
+    async function saveToDb(array) {
+        try {
+            await fetch(dbUrl, {
+                method: 'POST',
+                body: JSON.stringify(array)
+            });
+        } catch (e) { console.error("Ошибка сети:", e); }
+    }
+
+    // Клик по кнопке
+    async function castVote() {
+        if (localStorage.getItem(storageKey)) {
+            alert("Вы уже голосовали с этого устройства!");
+            return;
+        }
+
+        const selected = document.querySelector('input[name="lang"]:checked');
+        if (!selected) return;
+
+        const idx = parseInt(selected.value);
+
+        // Скачиваем актуальные результаты перед добавлением своего голоса
+        try {
+            const res = await fetch(dbUrl);
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data)) votes = data;
+            }
+        } catch(e){}
+
+        votes[idx]++; // Добавляем голос
+
+        // Обновляем у себя на экране
+        chart.data.datasets[0].data = votes;
+        chart.update();
+        updateLeaderboard();
+
+        // Блокируем кнопку на этом устройстве
+        localStorage.setItem(storageKey, 'true');
+        disableButton();
+
+        // Отправляем в общую базу
+        await saveToDb(votes);
+    }
+
+    function updateLeaderboard() {
+        const max = Math.max(...votes);
+        const nameEl = document.getElementById('leaderName');
+        const dotEl = document.getElementById('leaderDot');
+
+        if (max === 0) {
+            nameEl.innerText = "Нет голосов";
+            dotEl.style.backgroundColor = "#ccc";
+            return;
+        }
+
+        const leaders = [];
+        votes.forEach((v, i) => { if (v === max) leaders.push(i); });
+
+        if (leaders.length > 1) {
+            nameEl.innerText = "Ничья";
+            dotEl.style.backgroundColor = "#888";
+        } else {
+            const winner = leaders[0];
+            nameEl.innerText = labels[winner];
+            dotEl.style.backgroundColor = colors[winner];
+        }
+    }
+
+    function disableButton() {
+        const btn = document.getElementById('voteBtn');
+        btn.disabled = true;
+        btn.innerText = "Вы уже проголосовали";
+    }
+
+    if (localStorage.getItem(storageKey)) {
+        disableButton();
+    }
+
+    loadData();
+    setInterval(loadData, 3000); // Синхронизация каждые 3 секунды
+</script>
+</body>
+</html>
