@@ -2,136 +2,225 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Опрос в реальном времени</title>
-    <!-- Подключаем библиотеку диаграмм -->
+    <title>Система онлайн-опроса в реальном времени</title>
+    
+    <!-- Подключение внешней библиотеки Chart.js для визуализации диаграмм -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
     <style>
-        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #eef2f3; margin: 0; }
-        .card { width: 320px; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
-        h3 { margin-top: 0; color: #333; }
-        label { display: block; margin: 12px 0; text-align: left; font-size: 16px; color: #555; cursor: pointer; }
-        input[type="radio"] { margin-right: 10px; transform: scale(1.1); }
-        .btn { width: 100%; padding: 12px; margin-top: 15px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; background-color: #4CAF50; color: white; }
-        .leader-box { margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: bold; font-size: 16px; }
-        .dot { width: 14px; height: 14px; border-radius: 50%; background-color: #ccc; border: 1px solid #999; }
-        #status { font-size: 18px; color: #555; text-align: center; }
+        /* Основные стили страницы */
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            background: linear-gradient(135deg, #eef2f3 0%, #8e9eab 100%); 
+            margin: 0; 
+        }
+
+        /* Стиль карточки опроса */
+        .card { 
+            width: 350px; 
+            background: white; 
+            padding: 30px; 
+            border-radius: 16px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15); 
+            text-align: center; 
+        }
+
+        h3 { 
+            margin-top: 0; 
+            color: #2c3e50; 
+            font-size: 22px;
+            margin-bottom: 25px;
+        }
+
+        /* Стили для интерактивных вариантов ответов */
+        label { 
+            display: flex;
+            align-items: center;
+            margin: 15px 0; 
+            padding: 10px 15px;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 16px; 
+            color: #495057; 
+            cursor: pointer; 
+            transition: all 0.2s ease;
+        }
+
+        label:hover {
+            background-color: #e9ecef;
+            border-color: #dee2e6;
+        }
+
+        input[type="radio"] { 
+            margin-right: 15px; 
+            transform: scale(1.2); 
+            cursor: pointer;
+        }
+
+        /* Стиль кнопки голосования */
+        .btn { 
+            width: 100%; 
+            padding: 12px; 
+            margin-top: 15px; 
+            border: none; 
+            border-radius: 8px; 
+            font-size: 16px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            background-color: #2ecc71; 
+            color: white; 
+            box-shadow: 0 4px 6px rgba(46, 204, 113, 0.2);
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover { 
+            background-color: #27ae60; 
+            box-shadow: 0 6px 12px rgba(46, 204, 113, 0.3);
+        }
+
+        /* Контейнер информации о лидере */
+        .leader-box { 
+            margin-top: 25px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 10px; 
+            font-weight: bold; 
+            font-size: 18px; 
+            color: #2c3e50;
+        }
+
+        /* Круглый цветной маркер лидера */
+        .dot { 
+            width: 16px; 
+            height: 16px; 
+            border-radius: 50%; 
+            background-color: #ccc; 
+            border: 1.5px solid #bdc3c7; 
+            transition: background-color 0.5s ease;
+        }
+
+        #pollChart {
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
 
-<!-- Экран загрузки -->
-<div id="status">Связь с базой данных...</div>
-
-<!-- Карточка опроса -->
-<div class="card" id="mainCard" style="display: none;">
+<div class="card">
     <h3>Лучший язык программирования?</h3>
+    
+    <!-- Блок радио-кнопок для выбора ответа -->
     <label><input type="radio" name="lang" value="0" checked> JavaScript</label>
     <label><input type="radio" name="lang" value="1"> Python</label>
     <label><input type="radio" name="lang" value="2"> C++</label>
     
     <button id="voteBtn" class="btn" onclick="castVote()">Голосовать</button>
 
+    <!-- Вывод текущего лидера опроса -->
     <div class="leader-box">
         <span>Лидер:</span>
         <span id="leaderName">Загрузка...</span>
         <div id="leaderDot" class="dot"></div>
     </div>
-    <canvas id="pollChart" height="200"></canvas>
+    
+    <!-- Область отрисовки диаграммы Chart.js -->
+    <canvas id="pollChart" height="220"></canvas>
 </div>
 
 <script>
-    const urlParams = new URLSearchParams(window.location.search);
-    let pollId = urlParams.get('pollId');
+    // Идентификатор нашей выделенной базы данных на сервере JSONBlob
+    const binId = "8b3e8e7c-87d5-4554-b4a1-872011b93f2f"; 
+    const url = "https://jsonblob.com/api/jsonBlob/" + binId;
 
     const labels = ['JavaScript', 'Python', 'C++'];
-    const colors = ['#f7df1e', '#3776ab', '#00599c'];
+    const colors = ['#f7df1e', '#3776ab', '#00599c']; // Фирменные цвета языков
     let votes = [0, 0, 0];
     let chart;
 
-    async function startApp() {
-        if (!pollId) {
-            // Если зашли без ID, создаем новую ячейку в интернете на JSONBlob
-            document.getElementById('status').innerText = 'Создаем таблицу голосов в облаке...';
-            try {
-                const res = await fetch('https://jsonblob.com/api/jsonBlob', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ votes: [0, 0, 0] })
-                });
-                // Забираем уникальный ID созданной базы данных
-                const newId = res.headers.get('x-jsonblob');
-                
-                // Перенаправляем браузер на эту же страницу, но уже со своим личным pollId
-                window.location.href = window.location.origin + window.location.pathname + '?pollId=' + newId;
-            } catch (e) {
-                document.getElementById('status').innerText = 'Ошибка сети. Запустите страницу через ссылку GitHub, а не как файл!';
-                console.error(e);
+    // 1. Инициализация и базовая настройка диаграммы Chart.js
+    const ctx = document.getElementById('pollChart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: { 
+            labels: labels, 
+            datasets: [{ 
+                data: votes, 
+                backgroundColor: colors,
+                borderRadius: 6 // Легкое скругление столбиков
+            }] 
+        },
+        options: { 
+            plugins: { legend: { display: false } }, 
+            scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } 
+        }
+    });
+
+    // 2. Функция асинхронной загрузки данных из облачного хранилища
+    async function loadData() {
+        try {
+            // Запрашиваем данные, добавляя метку времени для обхода кэша браузера
+            let res = await fetch(url + '?t=' + Date.now());
+            if (res.ok) {
+                let data = await res.json();
+                if (data && Array.isArray(data.votes)) {
+                    votes = data.votes;
+                    chart.data.datasets[0].data = votes; // Передаем данные на диаграмму
+                    chart.update(); // Перерисовываем диаграмму
+                    updateLeaderboard(); // Обновляем информацию о лидере
+                }
             }
-        } else {
-            // Если ID есть в ссылке, показываем опрос
-            document.getElementById('status').style.display = 'none';
-            document.getElementById('mainCard').style.display = 'block';
-            initChart();
-            await loadData();
-            setInterval(loadData, 3000); // Синхронизация каждые 3 секунды
+        } catch (e) { 
+            console.log("Синхронизация данных..."); 
         }
     }
 
-    function initChart() {
-        const ctx = document.getElementById('pollChart').getContext('2d');
-        chart = new Chart(ctx, {
-            type: 'bar',
-            data: { labels: labels, datasets: [{ data: votes, backgroundColor: colors }] },
-            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-        });
-    }
-
-    async function loadData() {
-        try {
-            const res = await fetch(`https://jsonblob.com/api/jsonBlob/${pollId}`);
-            if (res.ok) {
-                const data = await res.json();
-                if (data && Array.isArray(data.votes)) {
-                    votes = data.votes;
-                    chart.data.datasets[0].data = votes;
-                    chart.update();
-                    updateLeaderboard();
-                }
-            }
-        } catch (e) { console.log("Синхронизация..."); }
-    }
-
+    // 3. Функция отправки новых данных на сервер
     async function saveToDb(newVotes) {
         try {
-            await fetch(`https://jsonblob.com/api/jsonBlob/${pollId}`, {
+            await fetch(url, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ votes: newVotes })
             });
-        } catch (e) { console.error(e); }
+        } catch (e) { 
+            console.error("Ошибка при сохранении на сервере:", e); 
+        }
     }
 
+    // 4. Обработчик нажатия на кнопку "Голосовать" (голосование свободное, без блокировок)
     async function castVote() {
         const selected = document.querySelector('input[name="lang"]:checked');
         if (!selected) return;
+
         const idx = parseInt(selected.value);
 
+        // Перед отправкой скачиваем актуальные данные, чтобы не перезаписать чужие голоса
         try {
-            const res = await fetch(`https://jsonblob.com/api/jsonBlob/${pollId}`);
+            let res = await fetch(url + '?t=' + Date.now());
             if (res.ok) {
-                const data = await res.json();
+                let data = await res.json();
                 if (data && Array.isArray(data.votes)) votes = data.votes;
             }
         } catch(e){}
 
-        votes[idx]++;
+        votes[idx]++; // Добавляем наш голос к выбранному элементу
+
+        // Моментально обновляем интерфейс у себя для отзывчивости
         chart.data.datasets[0].data = votes;
         chart.update();
         updateLeaderboard();
 
+        // Отправляем измененный массив в облачную базу данных
         await saveToDb(votes);
     }
 
+    // 5. Алгоритм вычисления лидера и динамического изменения цвета маркера
     function updateLeaderboard() {
         const max = Math.max(...votes);
         const nameEl = document.getElementById('leaderName');
@@ -139,24 +228,29 @@
 
         if (max === 0) {
             nameEl.innerText = "Нет голосов";
-            dotEl.style.backgroundColor = "#ccc";
+            dotEl.style.backgroundColor = "#ccc"; // Серый цвет, если голосов нет
             return;
         }
 
+        // Вычисляем, сколько вариантов набрали максимальное количество очков
         const leaders = [];
         votes.forEach((v, i) => { if (v === max) leaders.push(i); });
 
         if (leaders.length > 1) {
             nameEl.innerText = "Ничья";
-            dotEl.style.backgroundColor = "#888";
+            dotEl.style.backgroundColor = "#7f8c8d"; // Темный маркер при ничьей
         } else {
             const winner = leaders[0];
-            nameEl.innerText = labels[winner];
-            dotEl.style.backgroundColor = colors[winner];
+            nameEl.innerText = labels[winner]; // Выводим имя лидера
+            dotEl.style.backgroundColor = colors[winner]; // Красим индикатор в цвет победителя
         }
     }
 
-    startApp();
+    // Запуск первичной загрузки данных при входе на страницу
+    loadData();
+    
+    // Интервал автоматического обновления диаграммы (каждые 3 секунды)
+    setInterval(loadData, 3000); 
 </script>
 </body>
 </html>
