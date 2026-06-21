@@ -2,173 +2,166 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Система онлайн-опроса</title>
-    <!-- Подключаем библиотеку диаграмм -->
+    <title> Онлайн Опрос</title>
+    <!-- Подключаем библиотеку для рисования графиков Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        /* Стили оформления страницы и карточек */
         body { 
             font-family: sans-serif; 
             display: flex; 
-            justify-content: center; 
+            flex-direction: column; 
             align-items: center; 
-            min-height: 100vh; 
+            gap: 25px; 
+            padding: 40px 10px;
             background: linear-gradient(135deg, #eef2f3 0%, #8e9eab 100%); 
             margin: 0; 
         }
         .card { 
-            width: 320px; 
+            width: 330px; 
             background: white; 
             padding: 25px; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15); 
+            border-radius: 14px; 
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15); 
             text-align: center; 
         }
-        h3 { margin-top: 0; color: #2c3e50; }
+        h3 { margin-top: 0; color: #2c3e50; font-size: 18px; line-height: 1.4; }
+        
+        /* Стили плашек для вариантов ответов */
         label { 
             display: block; 
-            margin: 12px 0; 
+            margin: 10px 0; 
             text-align: left; 
-            font-size: 16px; 
+            font-size: 15px; 
             color: #555; 
             cursor: pointer; 
             padding: 8px;
             background: #f8f9fa;
             border-radius: 6px;
+            border: 1px solid #eee;
         }
-        input[type="radio"] { margin-right: 10px; transform: scale(1.1); }
+        label:hover { background: #e9ecef; }
+        input[type="radio"], input[type="checkbox"] { margin-right: 10px; transform: scale(1.1); }
+        
         .btn { 
             width: 100%; 
             padding: 12px; 
             margin-top: 15px; 
             border: none; 
-            border-radius: 6px; 
+            border-radius: 8px; 
             font-size: 16px; 
             font-weight: bold; 
             cursor: pointer; 
-            background-color: #2ecc71; 
+            background-color:darkgreen ; 
             color: white; 
+            transition: background-color 0.2s;
         }
-        .btn:hover { background-color: #27ae60; }
-        .leader-box { margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: bold; font-size: 16px; }
-        .dot { width: 14px; height: 14px; border-radius: 50%; background-color: #ccc; border: 1px solid #999; }
+        .btn:hover { background-color: lightgreen; }
+        
+        .fake-disabled {
+            background-color: #bdc3c7 !important;
+            color: grey!important;
+            cursor: not-allowed !important; 
+        }
+
     </style>
 </head>
 <body>
-
 <div class="card">
-    <h3>Лучший язык программирования?</h3>
+    <h3>Каким языком программирования вы пользуетесь?</h3>
     <label><input type="radio" name="lang" value="0" checked> JavaScript</label>
     <label><input type="radio" name="lang" value="1"> Python</label>
     <label><input type="radio" name="lang" value="2"> C++</label>
-    
-    <button id="voteBtn" class="btn" onclick="castVote()">Голосовать</button>
+    <label><input type="radio" name="lang" value="3"> C#</label>
+    <button id="b1" class="btn" onclick="vote1()">Голосовать</button>
+    <canvas id="pollChart1" height="200"></canvas>
+</div>
 
-    <div class="leader-box">
-        <span>Лидер:</span>
-        <span id="leaderName">Загрузка...</span>
-        <div id="leaderDot" class="dot"></div>
-    </div>
-    <canvas id="pollChart" height="200"></canvas>
+<div class="card">
+    <h3>Почему вы выбрали этот язык?</h3>
+    <label><input type="checkbox" name="reason" value="0"> Быстрое и легкое обучение </label>
+    <label><input type="checkbox" name="reason" value="1"> Востребованность </label>
+    <label><input type="checkbox" name="reason" value="2"> Сфера применения</label>
+    <label><input type="checkbox" name="reason" value="3"> Личные предпочтения</label>
+    <button id="b2" class="btn" onclick="vote2()">Голосовать</button>
+    <canvas id="pollChart2" height="200"></canvas>
+</div>
+
+<div class="card">
+    <h3>Вам нравится работать на выбранном языке?</h3>
+    <label><input type="radio" name="like" value="0" checked> Да</label>
+    <label><input type="radio" name="like" value="1"> Нет</label>
+    <button id="b3" class="btn" onclick="vote3()">Голосовать</button>
+    <canvas id="pollChart3" height="150"></canvas>
 </div>
 
 <script>
-    // Уникальное имя нашей папки на сервере (заменил на свежую, чистую)
-    const namespace = 'makmar_opros_final_ultra_v1';
+    const u1 = 'https://poll-sync-default-rtdb.firebaseio.com/makmar_opros_langs.json';
+    const u2 = 'https://poll-sync-default-rtdb.firebaseio.com/makmar_opros_reasons.json';
+    const u3 = 'https://poll-sync-default-rtdb.firebaseio.com/makmar_opros_likes.json';
+
+    const L1 = ['JavaScript', 'Python', 'C++', 'C#'];
+    const L2 = ['Обучение', 'Рынок', 'Сфера', 'Личное'];
+    const L3 = ['Да', 'Нет'];
     
-    const labels = ['JavaScript', 'Python', 'C++'];
-    const colors = ['#f7df1e', '#3776ab', '#00599c'];
-    let votes = [0, 0, 0];
-    let chart;
+    const C1 = ['YellowGreen', 'Orange', 'SlateBlue', 'Khaki'];
+    const C2 = ['Coral', 'GreenYellow', 'Aqua', 'Violet'];
+    const C3 = ['Goldenrod', 'SkyBlue'];
+    
+    let v1 = [0, 0, 0, 0], v2 = [0, 0, 0, 0], v3 = [0, 0];
+    let f1 = false, f2 = false, f3 = false, a = false;
 
-    // 1. Рисуем график
-    const ctx = document.getElementById('pollChart').getContext('2d');
-    chart = new Chart(ctx, {
-        type: 'bar',
-        data: { labels: labels, datasets: [{ data: votes, backgroundColor: colors }] },
-        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-    });
+    // Упрощенная отрисовка графиков
+    const commonOpts = { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } };
+    const ch1 = new Chart(document.getElementById('pollChart1'), { type: 'bar', data: { labels: L1, datasets: [{ data: v1, backgroundColor: C1 }] }, options: commonOpts });
+    const ch2 = new Chart(document.getElementById('pollChart2'), { type: 'bar', data: { labels: L2, datasets: [{ data: v2, backgroundColor: C2 }] }, options: commonOpts });
+    const ch3 = new Chart(document.getElementById('pollChart3'), { type: 'bar', data: { labels: L3, datasets: [{ data: v3, backgroundColor: C3 }] }, options: commonOpts });
 
-    // Вспомогательная безопасная функция для загрузки одного счетчика
-    async function getSingleCount(key) {
+    async function load() {
         try {
-            // Добавляем ?t= чтобы обойти кэш Яндекса и мобильных операторов
-            const res = await fetch(`https://api.counterapi.dev/v1/${namespace}/${key}?t=` + Date.now());
-            if (res.ok) {
-                const data = await res.json();
-                return data.count || 0;
-            }
-        } catch (e) {
-            console.log("Ключ еще не создан, возвращаем 0");
-        }
-        return 0; // Если в облаке пусто или ошибка — возвращаем ноль, а не ломаем код
+            let r1 = await fetch(u1 + '?nocache=' + Math.random());
+            if (r1.ok) { v1 = await r1.json(); ch1.data.datasets[0].data = v1; ch1.update(); }
+            let r2 = await fetch(u2 + '?nocache=' + Math.random());
+            if (r2.ok) { v2 = await r2.json(); ch2.data.datasets[0].data = v2; ch2.update(); }
+            let r3 = await fetch(u3 + '?nocache=' + Math.random());
+            if (r3.ok) { v3 = await r3.json(); ch3.data.datasets[0].data = v3; ch3.update(); }
+        } catch (e) { console.log("Связь..."); }
     }
 
-    // 2. Функция загрузки ВСЕХ данных из облака
-    async function loadData() {
-        const countJS = await getSingleCount('js');
-        const countPy = await getSingleCount('python');
-        const countCpp = await getSingleCount('cpp');
+    async function save(url, arr) { try { await fetch(url, { method: 'PUT', body: JSON.stringify(arr) }); } catch (e) {} }
 
-        votes = [countJS, countPy, countCpp];
+    function check() { if (f1 && f2 && f3 && !a) { alert("Спасибо за участие в опросe!"); a = true; } }
 
-        // Обновляем график на экране
-        chart.data.datasets[0].data = votes;
-        chart.update();
-        updateLeaderboard();
+    async function vote1() {
+        const sel = document.querySelector('input[name="lang"]:checked');
+        if (!sel) return;
+        v1[parseInt(sel.value)]++; ch1.update();
+        const btn = document.getElementById('b1');
+        btn.classList.add('fake-disabled'); btn.innerText = 'Отвечено';
+        f1 = true; await save(u1, v1); check();
     }
 
-    // 3. Клик по кнопке (Голосовать можно бесконечно для проверки!)
-    async function castVote() {
-        const selected = document.querySelector('input[name="lang"]:checked');
-        if (!selected) return;
-
-        const idx = parseInt(selected.value);
-        const keys = ['js', 'python', 'cpp'];
-        const activeKey = keys[idx];
-
-        // Моментально прибавляем у себя на экране для анимации
-        votes[idx]++;
-        chart.data.datasets[0].data = votes;
-        chart.update();
-        updateLeaderboard();
-
-        // Отправляем БЕЗОПАСНЫЙ запрос на увеличение счетчика в облаке на +1
-        try {
-            await fetch(`https://api.counterapi.dev/v1/${namespace}/${activeKey}/up?t=` + Date.now());
-            loadData(); // Перепроверяем свежие данные из облака
-        } catch(e) {
-            console.error("Ошибка сети при отправке");
-        }
+    async function vote2() {
+        const checkedBoxes = document.querySelectorAll('input[name="reason"]:checked');
+        if (checkedBoxes.length === 0) return;
+        checkedBoxes.forEach(box => v2[parseInt(box.value)]++);
+        ch2.update();
+        const btn = document.getElementById('b2');
+        btn.classList.add('fake-disabled'); btn.innerText = 'Отвечено';
+        f2 = true; await save(u2, v2); check();
     }
 
-    // 4. Поиск лидера и смена цвета кружка
-    function updateLeaderboard() {
-        const max = Math.max(...votes);
-        const nameEl = document.getElementById('leaderName');
-        const dotEl = document.getElementById('leaderDot');
-
-        if (max === 0) {
-            nameEl.innerText = "Нет голосов";
-            dotEl.style.backgroundColor = "#ccc";
-            return;
-        }
-
-        const leaders = [];
-        votes.forEach((v, i) => { if (v === max) leaders.push(i); });
-
-        if (leaders.length > 1) {
-            nameEl.innerText = "Ничья";
-            dotEl.style.backgroundColor = "#888";
-        } else {
-            const winner = leaders[0];
-            nameEl.innerText = labels[winner];
-            dotEl.style.backgroundColor = colors[winner];
-        }
+    async function vote3() {
+        const sel = document.querySelector('input[name="like"]:checked');
+        if (!sel) return;
+        v3[parseInt(sel.value)]++; ch3.update();
+        const btn = document.getElementById('b3');
+        btn.classList.add('fake-disabled'); btn.innerText = 'Отвечено';
+        f3 = true; await save(u3, v3); check();
     }
 
-    // Запуск автообновления каждые 3 секунды
-    loadData();
-    setInterval(loadData, 3000); 
+    load();
+    setInterval(load, 3000);
 </script>
 </body>
 </html>
