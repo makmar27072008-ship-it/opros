@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Опрос в реальном времени</title>
-    <!-- Подключаем графики -->
+    <!-- Подключаем библиотеку диаграмм -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #eef2f3; margin: 0; }
@@ -14,11 +14,16 @@
         .btn { width: 100%; padding: 12px; margin-top: 15px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; background-color: #4CAF50; color: white; }
         .leader-box { margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: bold; font-size: 16px; }
         .dot { width: 14px; height: 14px; border-radius: 50%; background-color: #ccc; border: 1px solid #999; }
+        #status { font-size: 18px; color: #555; text-align: center; }
     </style>
 </head>
 <body>
 
-<div class="card">
+<!-- Стартовый экран загрузки -->
+<div id="status">Инициализация базы данных...</div>
+
+<!-- Карточка опроса (появляется после загрузки) -->
+<div class="card" id="mainCard" style="display: none;">
     <h3>Лучший язык программирования?</h3>
     <label><input type="radio" name="lang" value="0" checked> JavaScript</label>
     <label><input type="radio" name="lang" value="1"> Python</label>
@@ -35,73 +40,111 @@
 </div>
 
 <script>
-    // Уникальная папка для твоих голосов на сервере CounterAPI
-    const namespace = 'makmar27072008_opros_v5';
-    
+    // Проверяем, есть ли уже ID опроса в ссылке
+    const urlParams = new URLSearchParams(window.location.search);
+    let pollId = urlParams.get('pollId');
+
     const labels = ['JavaScript', 'Python', 'C++'];
     const colors = ['#f7df1e', '#3776ab', '#00599c'];
     let votes = [0, 0, 0];
     let chart;
 
-    // Инициализируем график
-    const ctx = document.getElementById('pollChart').getContext('2d');
-    chart = new Chart(ctx, {
-        type: 'bar',
-        data: { labels: labels, datasets: [{ data: votes, backgroundColor: colors }] },
-        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-    });
+    // Главная функция запуска программы
+    async function startApp() {
+        if (!pollId) {
+            // ШАГ А: Если зашли по чистой ссылке, создаем новую ячейку в интернете
+            document.getElementById('status').innerText = 'Создаем общую таблицу голосов в облаке...';
+            try {
+                const res = await fetch('https://api.npoint.io/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ votes: [0, 0, 0] })
+                });
+                const data = await res.json();
+                // Перенаправляем браузер на эту же страницу, но уже со своим личным pollId
+                window.location.href = window.location.origin + window.location.pathname + '?pollId=' + data.id;
+            } catch (e) {
+                document.getElementById('status').innerText = 'Ошибка подключения к серверу. Обновите страницу.';
+                console.error(e);
+            }
+        } else {
+            // ШАГ Б: Если в ссылке уже есть pollId, загружаем данные и показываем опрос
+            document.getElementById('status').style.display = 'none';
+            document.getElementById('mainCard').style.display = 'block';
+            initChart();
+            await loadData();
+            // Каждые 3 секунды скачиваем новые данные
+            setInterval(loadData, 3000);
+        }
+    }
 
-    // Функция загрузки данных из облака
+    // Инициализируем график
+    function initChart() {
+        const ctx = document.getElementById('pollChart').getContext('2d');
+        chart = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: labels, datasets: [{ data: votes, backgroundColor: colors }] },
+            options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+        });
+    }
+
+    // Скачивание голосов из интернета
     async function loadData() {
         try {
-            // Скачиваем данные сразу для трех языков одновременно
-            const [resJS, resPy, resCpp] = await Promise.all([
-                fetch(`https://api.counterapi.dev/v1/${namespace}/js`),
-                fetch(`https://api.counterapi.dev/v1/${namespace}/python`),
-                fetch(`https://api.counterapi.dev/v1/${namespace}/cpp`)
-            ]);
-            
-            const dataJS = await resJS.json();
-            const dataPy = await resPy.json();
-            const dataCpp = await resCpp.json();
-            
-            // Если сервер вернул корректные цифры, записываем их
-            votes = [
-                dataJS.count || 0,
-                dataPy.count || 0,
-                dataCpp.count || 0
-            ];
-            
-            chart.data.datasets[0].data = votes;
-            chart.update();
-            updateLeaderboard();
+            const res = await fetch(`https://api.npoint.io/${pollId}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && Array.isArray(data.votes)) {
+                    votes = data.votes;
+                    chart.data.datasets[0].data = votes;
+                    chart.update();
+                    updateLeaderboard();
+                }
+            }
         } catch (e) { 
             console.log("Синхронизация..."); 
         }
     }
 
-    // Клик по кнопке (можно кликать бесконечно!)
+    // Отправка голосов в интернет
+    async function saveToDb(newVotes) {
+        try {
+            await fetch(`https://api.npoint.io/${pollId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ votes: newVotes })
+            });
+        } catch (e) { 
+            console.error("Ошибка при отправке голоса"); 
+        }
+    }
+
+    // Нажатие кнопки "Голосовать" (голосовать можно бесконечно для проверки!)
     async function castVote() {
         const selected = document.querySelector('input[name="lang"]:checked');
         if (!selected) return;
 
         const idx = parseInt(selected.value);
-        const keys = ['js', 'python', 'cpp'];
-        const activeKey = keys[idx];
 
-        // Моментально прибавляем у себя на экране для скорости
+        // 1. Быстро скачиваем актуальные голоса других людей перед отправкой своего
+        try {
+            const res = await fetch(`https://api.npoint.io/${pollId}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && Array.isArray(data.votes)) votes = data.votes;
+            }
+        } catch(e){}
+
+        // 2. Прибавляем твой голос
         votes[idx]++;
+
+        // 3. Сразу обновляем у себя на экране
         chart.data.datasets[0].data = votes;
         chart.update();
         updateLeaderboard();
 
-        // Отправляем команду в облако увеличить счетчик на +1
-        try {
-            await fetch(`https://api.counterapi.dev/v1/${namespace}/${activeKey}/up`);
-            loadData(); // Сразу перепроверяем актуальные данные
-        } catch(e) {
-            console.error("Ошибка при отправке голоса");
-        }
+        // 4. Отправляем в общую базу в интернете
+        await saveToDb(votes);
     }
 
     function updateLeaderboard() {
@@ -128,9 +171,8 @@
         }
     }
 
-    // Запуск автообновления каждые 3 секунды
-    loadData();
-    setInterval(loadData, 3000); 
+    // Запуск приложения
+    startApp();
 </script>
 </body>
 </html>
