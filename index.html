@@ -19,10 +19,10 @@
 </head>
 <body>
 
-<!-- Стартовый экран загрузки -->
-<div id="status">Инициализация базы данных...</div>
+<!-- Экран загрузки -->
+<div id="status">Связь с базой данных...</div>
 
-<!-- Карточка опроса (появляется после загрузки) -->
+<!-- Карточка опроса -->
 <div class="card" id="mainCard" style="display: none;">
     <h3>Лучший язык программирования?</h3>
     <label><input type="radio" name="lang" value="0" checked> JavaScript</label>
@@ -40,7 +40,6 @@
 </div>
 
 <script>
-    // Проверяем, есть ли уже ID опроса в ссылке
     const urlParams = new URLSearchParams(window.location.search);
     let pollId = urlParams.get('pollId');
 
@@ -49,36 +48,35 @@
     let votes = [0, 0, 0];
     let chart;
 
-    // Главная функция запуска программы
     async function startApp() {
         if (!pollId) {
-            // ШАГ А: Если зашли по чистой ссылке, создаем новую ячейку в интернете
-            document.getElementById('status').innerText = 'Создаем общую таблицу голосов в облаке...';
+            // Если зашли без ID, создаем новую ячейку в интернете на JSONBlob
+            document.getElementById('status').innerText = 'Создаем таблицу голосов в облаке...';
             try {
-                const res = await fetch('https://api.npoint.io/', {
+                const res = await fetch('https://jsonblob.com/api/jsonBlob', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ votes: [0, 0, 0] })
                 });
-                const data = await res.json();
+                // Забираем уникальный ID созданной базы данных
+                const newId = res.headers.get('x-jsonblob');
+                
                 // Перенаправляем браузер на эту же страницу, но уже со своим личным pollId
-                window.location.href = window.location.origin + window.location.pathname + '?pollId=' + data.id;
+                window.location.href = window.location.origin + window.location.pathname + '?pollId=' + newId;
             } catch (e) {
-                document.getElementById('status').innerText = 'Ошибка подключения к серверу. Обновите страницу.';
+                document.getElementById('status').innerText = 'Ошибка сети. Запустите страницу через ссылку GitHub, а не как файл!';
                 console.error(e);
             }
         } else {
-            // ШАГ Б: Если в ссылке уже есть pollId, загружаем данные и показываем опрос
+            // Если ID есть в ссылке, показываем опрос
             document.getElementById('status').style.display = 'none';
             document.getElementById('mainCard').style.display = 'block';
             initChart();
             await loadData();
-            // Каждые 3 секунды скачиваем новые данные
-            setInterval(loadData, 3000);
+            setInterval(loadData, 3000); // Синхронизация каждые 3 секунды
         }
     }
 
-    // Инициализируем график
     function initChart() {
         const ctx = document.getElementById('pollChart').getContext('2d');
         chart = new Chart(ctx, {
@@ -88,10 +86,9 @@
         });
     }
 
-    // Скачивание голосов из интернета
     async function loadData() {
         try {
-            const res = await fetch(`https://api.npoint.io/${pollId}`);
+            const res = await fetch(`https://jsonblob.com/api/jsonBlob/${pollId}`);
             if (res.ok) {
                 const data = await res.json();
                 if (data && Array.isArray(data.votes)) {
@@ -101,49 +98,37 @@
                     updateLeaderboard();
                 }
             }
-        } catch (e) { 
-            console.log("Синхронизация..."); 
-        }
+        } catch (e) { console.log("Синхронизация..."); }
     }
 
-    // Отправка голосов в интернет
     async function saveToDb(newVotes) {
         try {
-            await fetch(`https://api.npoint.io/${pollId}`, {
-                method: 'POST',
+            await fetch(`https://jsonblob.com/api/jsonBlob/${pollId}`, {
+                method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ votes: newVotes })
             });
-        } catch (e) { 
-            console.error("Ошибка при отправке голоса"); 
-        }
+        } catch (e) { console.error(e); }
     }
 
-    // Нажатие кнопки "Голосовать" (голосовать можно бесконечно для проверки!)
     async function castVote() {
         const selected = document.querySelector('input[name="lang"]:checked');
         if (!selected) return;
-
         const idx = parseInt(selected.value);
 
-        // 1. Быстро скачиваем актуальные голоса других людей перед отправкой своего
         try {
-            const res = await fetch(`https://api.npoint.io/${pollId}`);
+            const res = await fetch(`https://jsonblob.com/api/jsonBlob/${pollId}`);
             if (res.ok) {
                 const data = await res.json();
                 if (data && Array.isArray(data.votes)) votes = data.votes;
             }
         } catch(e){}
 
-        // 2. Прибавляем твой голос
         votes[idx]++;
-
-        // 3. Сразу обновляем у себя на экране
         chart.data.datasets[0].data = votes;
         chart.update();
         updateLeaderboard();
 
-        // 4. Отправляем в общую базу в интернете
         await saveToDb(votes);
     }
 
@@ -171,7 +156,6 @@
         }
     }
 
-    // Запуск приложения
     startApp();
 </script>
 </body>
